@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hà Nội Trong Trí Nhớ: Diệu Linh</title>
+    <style>
+        :root {
+            --glass-bg: rgba(15, 15, 25, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --primary-pink: #ff758c;
+            --text-light: #fdfdfd;
+        }
+        
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #030305; font-family: 'Segoe UI', system-ui, sans-serif;
+            touch-action: none; user-select: none; -webkit-user-select: none;
+        }
+        
+        #gameCanvas { display: block; width: 100%; height: 100%; transition: filter 0.5s; }
+        .cinematic-blur { filter: blur(5px) brightness(0.6); }
+        .sunset-overlay { filter: sepia(0.4) saturate(1.5) hue-rotate(-15deg) brightness(0.8) !important; transition: filter 3s ease-in-out; }
+        
+        #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+        
+        .glass-panel {
+            background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-light); pointer-events: auto;
+        }
+
+        #minimap-wrapper {
+            position: absolute; top: 20px; left: 20px; width: 160px; height: 120px;
+            background: rgba(10, 10, 15, 0.7); border: 2px solid var(--glass-border); border-radius: 8px;
+            overflow: hidden; z-index: 10; pointer-events: auto;
+        }
+        #minimapCanvas { width: 100%; height: 100%; display: block; }
+
+        #top-bar { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+        #location-hud { padding: 6px 12px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,0.6); border: 1px solid var(--glass-border); border-radius: 20px; color: #a4c8e1; }
+        #affection-wrapper { display: flex; align-items: center; gap: 10px; }
+        #affection-container { width: 160px; height: 14px; background: rgba(0,0,0,0.7); border-radius: 7px; border: 1px solid var(--glass-border); overflow: hidden; }
+        #affection-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #ff4d6d, #ff758c); transition: width 0.8s; }
+        
+        #quest-tracker { padding: 10px 16px; font-size: 12px; font-weight: 700; border-left: 4px solid var(--primary-pink); max-width: 250px; text-align: right; line-height: 1.4; }
+
+        #joy-base { position: absolute; bottom: 50px; left: 50px; width: 130px; height: 130px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; pointer-events: auto; }
+        #joy-stick { position: absolute; top: 50%; left: 50%; width: 55px; height: 55px; background: rgba(255,255,255,0.25); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+
+        #interact-btn { position: absolute; bottom: 65px; right: 65px; width: 90px; height: 90px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: 800; font-size: 13px; opacity: 0; transform: scale(0.7); pointer-events: none; transition: all 0.3s; color: white; border: 1px solid rgba(255,255,255,0.3); text-align: center; }
+        #interact-btn.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+        #interact-btn:active { transform: scale(0.9); background: var(--primary-pink); }
+
+        #dialogue-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 750px; padding: 25px 30px; display: none; flex-direction: column; border-top: 4px solid var(--primary-pink); box-sizing: border-box; background: rgba(10, 10, 15, 0.95); }
+        #speaker-name { font-size: 20px; font-weight: 800; color: var(--primary-pink); margin-bottom: 12px; }
+        #dialogue-text { font-size: 17px; line-height: 1.6; color: var(--text-light); min-height: 70px; }
+        #choices-container { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .choice-btn { padding: 15px; background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer; color: white; font-weight: 600; }
+        .choice-btn:active { background: var(--primary-pink); }
+
+        #fade-overlay { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; z-index: 100; transition: opacity 0.6s, background 2s; }
+        .fade-white { background: #fff !important; }
+        
+        #ending-screen { position: absolute; inset: 0; background: black; color: white; z-index: 200; display: none; flex-direction: column; justify-content: center; align-items: center; opacity: 0; transition: opacity 2s; text-align: center; padding: 20px; }
+        #creator-credit { position: absolute; bottom: 15px; left: 20px; font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.3); pointer-events: none; z-index: 5; text-transform: uppercase; }
+
+        #minigame-layer { position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; backdrop-filter: blur(8px); }
+        #mg-header { color: white; font-size: 20px; font-weight: bold; margin-bottom: 20px; text-shadow: 0 2px 4px #000; }
+        #mg-content { position: relative; width: 90%; max-width: 400px; height: 400px; background: rgba(255,255,255,0.05); border: 2px solid var(--primary-pink); border-radius: 12px; overflow: hidden; }
+        
+        .mg-memory-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 15px; height: 100%; box-sizing: border-box; }
+        .mg-card { background: rgba(255,255,255,0.1); border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 32px; cursor: pointer; transition: 0.3s transform; }
+        .mg-card.flipped { background: white; transform: rotateY(180deg); }
+        .mg-card.matched { opacity: 0; pointer-events: none; }
+        
+        .mg-target { position: absolute; width: 40px; height: 40px; background: radial-gradient(circle, var(--primary-pink) 0%, transparent 100%); border-radius: 50%; animation: popIn 0.2s; cursor: pointer; }
+        @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="fade-overlay"></div>
+    <div id="ending-screen"></div>
+
+    <div id="ui-layer">
+        <div id="minimap-wrapper"><canvas id="minimapCanvas"></canvas></div>
+        <div id="top-bar">
+            <div id="location-hud">Sân Trường THCS GB</div>
+            <div id="affection-wrapper">
+                <span style="color: var(--primary-pink); font-size: 18px; text-shadow: 0 0 8px red;">❤</span>
+                <div id="affection-container"><div id="affection-fill"></div></div>
+            </div>
+            <div id="quest-tracker" class="glass-panel">Nhiệm vụ: Gặp Diệu Linh</div>
+        </div>
+
+        <div id="joy-base"><div id="joy-stick"></div></div>
+        <div id="interact-btn" class="glass-panel">TƯƠNG<br>TÁC</div>
+
+        <div id="dialogue-container" class="glass-panel">
+            <div id="speaker-name">Name</div>
+            <div id="dialogue-text">...</div>
+            <div id="choices-container"></div>
+        </div>
+        <div id="creator-credit">Created by Minh Đức</div>
+    </div>
+
+    <div id="minigame-layer">
+        <div id="mg-header">MINIGAME</div>
+        <div id="mg-content"></div>
+    </div>
+
+<script>
+    const UI = {
+        affectionFill: document.getElementById('affection-fill'),
+        questTracker: document.getElementById('quest-tracker'),
+        locationHud: document.getElementById('location-hud'),
+        diagContainer: document.getElementById('dialogue-container'),
+        speakerName: document.getElementById('speaker-name'),
+        dialogueText: document.getElementById('dialogue-text'),
+        choicesBox: document.getElementById('choices-container'),
+        fadeOverlay: document.getElementById('fade-overlay'),
+        endingScreen: document.getElementById('ending-screen'),
+        interactBtn: document.getElementById('interact-btn'),
+        uiLayer: document.getElementById('ui-layer'),
+        minimapCanvas: document.getElementById('minimapCanvas'),
+        mgLayer: document.getElementById('minigame-layer'),
+        mgHeader: document.getElementById('mg-header'),
+        mgContent: document.getElementById('mg-content')
+    };
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const miniCtx = UI.minimapCanvas.getContext('2d');
+    
+    let width, height, lastTime = 0;
+
+    let audioCtx;
+    function initAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playBeep(freq, type='sine') {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+    }
+
+    class Joystick {
+        constructor(baseId, stickId) {
+            this.base = document.getElementById(baseId); this.stick = document.getElementById(stickId);
+            this.active = false; this.pointerId = null; this.input = { x: 0, y: 0 };
+            this.base.addEventListener('pointerdown', (e) => { initAudio(); this.onStart(e); });
+            window.addEventListener('pointermove', (e) => this.onMove(e));
+            window.addEventListener('pointerup', (e) => this.onEnd(e));
+            window.addEventListener('pointercancel', (e) => this.onEnd(e));
+        }
+        onStart(e) { if(this.active || STATE.mode !== 'WORLD') return; this.active = true; this.pointerId = e.pointerId; this.base.setPointerCapture(e.pointerId); const rect = this.base.getBoundingClientRect(); this.cX = rect.left + 65; this.cY = rect.top + 65; this.onMove(e); }
+        onMove(e) { if(!this.active || e.pointerId !== this.pointerId) return; const dx = e.clientX - this.cX; const dy = e.clientY - this.cY; const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 65); const angle = Math.atan2(dy, dx); this.input.x = (Math.cos(angle)*dist)/65; this.input.y = (Math.sin(angle)*dist)/65; this.stick.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`; }
+        onEnd(e) { if(e.pointerId !== this.pointerId) return; this.active = false; this.pointerId = null; this.input = {x:0,y:0}; this.stick.style.transform = `translate(-50%, -50%)`; }
+        getVelocity() { return Math.abs(this.input.x)>0.1||Math.abs(this.input.y)>0.1 ? this.input : {x:0,y:0}; }
+    }
+    const joystick = new Joystick('joy-base', 'joy-stick');
+
+    const MinigameEngine = {
+        active: false,
+        intervals: [],
+        score: 0,
+        multiplier: 1.0,
+        
+        start(gameType, onCompleteCallback) {
+            STATE.mode = 'MINIGAME';
+            this.active = true;
+            this.score = 0;
+            this.intervals.forEach(clearInterval); this.intervals = [];
+            UI.mgContent.innerHTML = '';
+            UI.mgLayer.style.display = 'flex';
+            this.onComplete = onCompleteCallback;
+
+            if(gameType === 'MEMORY') this.initMemory();
+            else if(gameType === 'REFLEX') this.initReflex();
+            else if(gameType === 'CARO') this.initCaro();
+        },
+
+        updateHeader(text) { UI.mgHeader.innerText = text; },
+
+        endGame(success) {
+            if(!this.active) return;
+            this.active = false;
+            this.intervals.forEach(clearInterval);
+            
+            if(success) {
+                if(this.score > 80) this.multiplier = 1.5;
+                else if(this.score > 50) this.multiplier = 1.2;
+                else this.multiplier = 1.0;
+            } else this.multiplier = 0.5;
+
+            let finalAffectionGained = Math.floor(this.score * 0.15 * this.multiplier); 
+            this.updateHeader(`Kết Thúc! Điểm: ${this.score} | Tình cảm: +${finalAffectionGained}`);
+            
+            setTimeout(() => {
+                UI.mgLayer.style.display = 'none';
+                if(this.onComplete) this.onComplete(finalAffectionGained);
+            }, 1800);
+        },
+
+        initMemory() { /* giữ nguyên như cũ */ 
+            this.updateHeader("TÌM KÝ ỨC (Lật Thẻ)");
+            let items = ['🌸', '📚', '💌', '🍵', '🎨', '🚲', '🌅', '🎀'];
+            let deck = [...items, ...items].sort(() => Math.random() - 0.5);
+            UI.mgContent.innerHTML = '<div class="mg-memory-grid" id="mem-grid"></div>';
+            const grid = document.getElementById('mem-grid');
+            let flipped = []; let matched = 0;
+
+            deck.forEach(emoji => {
+                let card = document.createElement('div');
+                card.className = 'mg-card';
+                card.dataset.val = emoji;
+                card.onclick = () => {
+                    if(flipped.length >= 2 || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+                    playBeep(400, 'square');
+                    card.classList.add('flipped');
+                    card.innerText = emoji;
+                    flipped.push(card);
+                    if(flipped.length === 2) {
+                        if(flipped[0].dataset.val === flipped[1].dataset.val) {
+                            this.score += 10 * (++this.combo || 1);
+                            this.updateHeader(`Score: ${this.score} | Combo: x${this.combo}`);
+                            setTimeout(() => {
+                                flipped[0].classList.add('matched'); flipped[1].classList.add('matched');
+                                flipped = []; matched += 2;
+                                if(matched === deck.length) this.endGame(true);
+                            }, 500);
+                        } else {
+                            this.combo = 0;
+                            this.updateHeader(`Score: ${this.score} | Combo: x${this.combo}`);
+                            setTimeout(() => {
+                                flipped[0].classList.remove('flipped'); flipped[1].classList.remove('flipped');
+                                flipped[0].innerText = ''; flipped[1].innerText = '';
+                                flipped = [];
+                            }, 800);
+                        }
+                    }
+                };
+                grid.appendChild(card);
+            });
+        },
+
+        initReflex() { /* giữ nguyên */ 
+            this.updateHeader("HỨNG TRÀ SỮA! (Nhấn nhanh)");
+            let time = 15;
+            let spawner = setInterval(() => {
+                if(!this.active) return;
+                let t = document.createElement('div');
+                t.className = 'mg-target';
+                t.style.left = Math.random() * (UI.mgContent.clientWidth - 40) + 'px';
+                t.style.top = Math.random() * (UI.mgContent.clientHeight - 40) + 'px';
+                t.onpointerdown = () => {
+                    playBeep(600, 'triangle');
+                    this.score += 5;
+                    this.updateHeader(`Điểm: ${this.score} | Thời gian: ${time}s`);
+                    t.remove();
+                };
+                UI.mgContent.appendChild(t);
+                setTimeout(() => { if(t.parentElement) t.remove(); }, 1200);
+            }, 600);
+            this.intervals.push(spawner);
+
+            let countdown = setInterval(() => {
+                time--;
+                this.updateHeader(`Điểm: ${this.score} | Thời gian: ${time}s`);
+                if(time <= 0) {
+                    clearInterval(spawner); clearInterval(countdown);
+                    this.endGame(this.score > 30);
+                }
+            }, 1000);
+            this.intervals.push(countdown);
+        },
+
+        // ==================== CỜ CARO MỚI ====================
+        initCaro() {
+            this.updateHeader("CỜ CARO - LẤY HỘP MÀU");
+            UI.mgContent.innerHTML = `
+                <div style="padding:20px;text-align:center;height:100%;display:flex;flex-direction:column;justify-content:center;">
+                    <div id="caro-status" style="margin-bottom:15px;font-size:18px;font-weight:bold;color:#ff758c;">Lượt của bạn (X)</div>
+                    <div id="caro-board" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:300px;height:300px;margin:0 auto;background:rgba(0,0,0,0.3);padding:10px;border-radius:12px;"></div>
+                    <div id="caro-result" style="margin-top:20px;font-size:20px;min-height:30px;font-weight:bold;"></div>
+                </div>
+            `;
+
+            const boardEl = document.getElementById('caro-board');
+            const statusEl = document.getElementById('caro-status');
+            const resultEl = document.getElementById('caro-result');
+            
+            let board = Array(9).fill(null);
+            let currentPlayer = 'X';
+            let gameOver = false;
+            const engine = this;
+
+            const winningCombos = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+            function checkWinner(p) { return winningCombos.some(c => c.every(i => board[i] === p)); }
+            function isDraw() { return board.every(c => c !== null); }
+
+            function renderBoard() {
+                boardEl.innerHTML = '';
+                board.forEach((cell, i) => {
+                    const el = document.createElement('div');
+                    el.style.cssText = `width:90px;height:90px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:bold;cursor:pointer;border-radius:8px;color:${cell==='X'?'#ff758c':'#a4c8e1'};`;
+                    el.textContent = cell || '';
+                    if (!cell && !gameOver) el.onclick = () => makeMove(i);
+                    boardEl.appendChild(el);
+                });
+            }
+
+            function makeMove(i) {
+                if (gameOver || board[i] || currentPlayer !== 'X') return;
+                board[i] = 'X';
+                playBeep(700);
+                renderBoard();
+                if (checkWinner('X')) { endGameRound(true); return; }
+                if (isDraw()) { endGameRound(false, true); return; }
+                currentPlayer = 'O';
+                statusEl.textContent = "Lượt AI (O)";
+                statusEl.style.color = '#a4c8e1';
+                setTimeout(aiMove, 400);
+            }
+
+            function aiMove() {
+                if (gameOver) return;
+                let empty = board.map((v,i)=>v===null?i:null).filter(v=>v!==null);
+                const move = empty[Math.floor(Math.random()*empty.length)];
+                board[move] = 'O';
+                playBeep(400);
+                renderBoard();
+                if (checkWinner('O')) { endGameRound(false); return; }
+                if (isDraw()) { endGameRound(false, true); return; }
+                currentPlayer = 'X';
+                statusEl.textContent = "Lượt của bạn (X)";
+                statusEl.style.color = '#ff758c';
+            }
+
+            function endGameRound(win, draw = false) {
+                gameOver = true;
+                engine.score = win ? 85 : (draw ? 50 : 25);
+                resultEl.innerHTML = win ? `<span style="color:#ff758c">🎉 BẠN THẮNG!</span>` : (draw ? `<span style="color:#ffd700">HÒA CỤC!</span>` : `<span style="color:#888">AI thắng...</span>`);
+                setTimeout(() => engine.endGame(true), 1600);
+            }
+
+            renderBoard();
+        }
+    };
+
+    const ZONES = {
+        'SAN_TRUONG': { name: 'Sân Trường THCS GB', bg: '#2a312a', light: 'rgba(255,250,230,0.1)', w: 1300, h: 975 },
+        'LOP_HOC': { name: 'Lớp 8a1', bg: '#3a3a45', light: 'rgba(200,220,255,0.05)', w: 780, h: 520 },
+        'QUAN_TRA_SUA': { name: 'Quán Trà Sữa', bg: '#403020', light: 'rgba(255,200,150,0.15)', w: 650, h: 520 },
+        'THU_VIEN': { name: 'Thư Viện', bg: '#252220', light: 'rgba(100,100,150,0.2)', w: 975, h: 650 },
+        'CONG_VIEN': { name: 'Công Viên', bg: '#1a221a', light: 'rgba(180,255,180,0.05)', w: 1430, h: 1040 },
+        'SAN_THUONG': { name: 'Sân Thượng', bg: '#2b2025', light: 'rgba(255,120,80,0.3)', w: 650, h: 455 }
+    };
+    
+    const STATE = { mode: 'WORLD', affection: 0, map: 'SAN_TRUONG', camera: { x: 0, y: 0, zoom: 1 }, targetNPC: null, cooldown: 0, questStep: 0 };
+    
+    const QUEST_LOG = [
+        "Cốt truyện: Gặp Diệu Linh ở Sân Trường THCS GB",
+        "Hỗ trợ: Mua Hồng Trà (Quán Trà Sữa) [MINIGAME]",
+        "Hỗ trợ: Mang trà sữa cho Diệu Linh",
+        "Thu thập: Tìm cuốn vở bị mất (Lớp 8a1) [MINIGAME]",
+        "Cốt truyện: Đưa vở cho Diệu Linh (Lớp 8a1)",
+        "Sự kiện: Giúp làm Poster (Thư Viện)",
+        "Thu thập: Lấy màu vẽ (Công Viên) [MINIGAME]",
+        "Sự kiện: Đem màu về Thư Viện",
+        "Cốt truyện: Cùng đi dạo Sân Trường",
+        "Cốt truyện: Chờ trên Sân Thượng",
+        "Sự kiện: Quyết định lúc hoàng hôn (Sân Thượng)"
+    ];
+    
+    const PLAYER = { x: 300, y: 300, speed: 300, radius: 22, isPlayer: true };
+    let CURRENT_ENTITIES = [];
+
+    function resize() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; }
+    window.addEventListener('resize', resize); resize();
+
+    function loadEntities() {
+        CURRENT_ENTITIES = [];
+        const m = STATE.map; const q = STATE.questStep;
+        if (m === 'SAN_TRUONG') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Đến Lớp 8a1', x: 130, y: 130, isPortal: 'LOP_HOC' });
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Quán Trà Sữa', x: 1170, y: 480, isPortal: 'QUAN_TRA_SUA' });
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Công Viên', x: 650, y: 845, isPortal: 'CONG_VIEN' });
+            if (q >= 9) CURRENT_ENTITIES.push({ id: 'portal', name: 'Lên Sân Thượng', x: 1170, y: 130, isPortal: 'SAN_THUONG' });
+            if ([0,1,2,8].includes(q)) CURRENT_ENTITIES.push({ id: 'dieulinh', name: 'Diệu Linh', x: 650, y: 480, isDL: true });
+        } else if (m === 'LOP_HOC') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Ra Sân Trường', x: 650, y: 450, isPortal: 'SAN_TRUONG' });
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Đến Thư Viện', x: 650, y: 100, isPortal: 'THU_VIEN' });
+            if (q === 3) CURRENT_ENTITIES.push({ id: 'item_book', name: 'Tìm Vở', x: 195, y: 195, isItem: true });
+            if ([4,5].includes(q)) CURRENT_ENTITIES.push({ id: 'dieulinh', name: 'Diệu Linh', x: 520, y: 260, isDL: true });
+        } else if (m === 'QUAN_TRA_SUA') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Về Sân Trường', x: 130, y: 450, isPortal: 'SAN_TRUONG' });
+            if (q === 1) CURRENT_ENTITIES.push({ id: 'npc_boba', name: 'Cô Bán Trà', x: 325, y: 195 });
+        } else if (m === 'THU_VIEN') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Về Lớp 8a1', x: 130, y: 520, isPortal: 'LOP_HOC' });
+            if ([5,7].includes(q)) CURRENT_ENTITIES.push({ id: 'dieulinh', name: 'Diệu Linh', x: 480, y: 325, isDL: true });
+        } else if (m === 'CONG_VIEN') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Về Sân Trường', x: 650, y: 130, isPortal: 'SAN_TRUONG' });
+            if (q === 6) CURRENT_ENTITIES.push({ id: 'npc_hai', name: 'Bác Hải', x: 975, y: 520 });
+        } else if (m === 'SAN_THUONG') {
+            CURRENT_ENTITIES.push({ id: 'portal', name: 'Xuống Sân Trường', x: 65, y: 390, isPortal: 'SAN_TRUONG' });
+            if ([9,10].includes(q)) CURRENT_ENTITIES.push({ id: 'dieulinh', name: 'Diệu Linh', x: 325, y: 220, isDL: true });
+        }
+    }
+
+    function changeMap(newMap) {
+        UI.fadeOverlay.style.opacity = '1'; STATE.mode = 'TRANSITION';
+        setTimeout(() => {
+            STATE.map = newMap; UI.locationHud.innerText = ZONES[newMap].name;
+            PLAYER.x = ZONES[newMap].w / 2; PLAYER.y = ZONES[newMap].h / 2;
+            loadEntities(); STATE.mode = 'WORLD'; UI.fadeOverlay.style.opacity = '0';
+        }, 600);
+    }
+
+    UI.interactBtn.addEventListener('pointerdown', (e) => {
+        initAudio(); e.preventDefault(); e.stopPropagation(); 
+        if (STATE.mode === 'WORLD' && STATE.targetNPC && STATE.cooldown <= 0) {
+            if (STATE.targetNPC.isPortal) changeMap(STATE.targetNPC.isPortal);
+            else startDialogue(STATE.targetNPC);
+        }
+    });
+
+    function startDialogue(npc) {
+        STATE.mode = 'DIALOGUE'; canvas.classList.add('cinematic-blur');
+        UI.speakerName.innerText = npc.name; UI.choicesBox.innerHTML = ''; 
+        let text = ""; let choices = []; const q = STATE.questStep;
+
+        if (npc.isItem) {
+            text = "Ký ức của Diệu Linh vương vãi khắp lớp... Chơi minigame Ký Ức để gom lại!";
+            choices.push({ text: "Bắt đầu tìm kiếm (MINIGAME)", nextQuest: q+1, minigame: 'MEMORY' });
+        } 
+        else if (npc.id === 'npc_boba') {
+            text = "Hồng trà có rồi đây! Nhưng quán đang đông quá, cháu phụ cô hứng cốc nhé!";
+            choices.push({ text: "Để cháu giúp! (MINIGAME)", nextQuest: 2, minigame: 'REFLEX' });
+        }
+        else if (npc.id === 'npc_hai') {
+            text = "Hộp màu à? Cháu chơi cờ caro với bác một ván đi, thắng thì bác cho màu vẽ nhé!";
+            choices.push({ text: "Cháu sẵn sàng! (MINIGAME)", nextQuest: 7, minigame: 'CARO' });
+        }
+        else if (npc.isDL) {
+            if (q === 0) { text = "Cậu lại tìm mình à...? Trường THCS GB hôm nay vắng thật đấy."; choices.push({ text: "Mình chỉ muốn qua xem cậu thế nào thôi.", nextQuest: 1, reward: 5 }); } 
+            else if (q === 1 || q === 2) {
+                if (q === 1) { text = "Tự nhiên... mình thèm hồng trà quá. Nếu có cậu đi cùng thì tốt..."; choices.push({ text: "Để tớ chạy đi mua cho cậu nhé.", nextQuest: 1, reward: 5 }); } 
+                else { text = "Cảm ơn cậu nhé! Nhìn cậu ướt mồ hôi kìa. À... cậu có thấy cuốn vở mình để quên ở Lớp 8a1 không?"; choices.push({ text: "Tớ sẽ quay lại lớp tìm cho cậu.", nextQuest: 3, reward: 5 }); }
+            }
+            else if (q === 4 || q === 5) {
+                if(q===4) { text = "Cậu tìm thấy rồi! Cảm ơn cậu. Tí nữa mình lên Thư Viện, cậu đi cùng không?"; choices.push({ text: "Tớ luôn rảnh khi người đó là cậu.", nextQuest: 5, reward: 5 }); } 
+                else { text = "Mình đang hoàn thiện poster về ô nhiễm không khí ở Hà Nội... Mình cần màu vẽ."; choices.push({ text: "Để tớ ra Công viên mượn Bác Hải cho.", nextQuest: 6, reward: 5 }); }
+            }
+            else if (q === 6 || q === 7) {
+                if (q === 6) { text = "Cậu đi lấy màu giúp mình nhé..."; choices.push({ text: "Đợi tớ một chút.", nextQuest: 6, reward: 0 }); } 
+                else { text = "Cảm ơn cậu nhé... Xong rồi! Lát nữa... lên Sân Thượng ngắm hoàng hôn với mình nhé?"; choices.push({ text: "Tớ luôn muốn ở cạnh cậu.", nextQuest: 8, reward: 5 }); }
+            }
+            else if (q === 8) { text = "Mình đi dạo quanh sân một chút rồi lên Sân Thượng nhé... Mình có chuyện muốn nói."; choices.push({ text: "Đi thôi, tớ đi ngay bên cạnh cậu.", nextQuest: 9, reward: 5 }); }
+            else if (q >= 9) {
+                if (STATE.affection >= 90) {
+                    STATE.mode = 'CINEMATIC_CONFESSION'; 
+                    text = "Gió lạnh thật... Cứ thấy cậu là tim mình đập lạ lắm. Cậu... có bao giờ... thích mình không?";
+                    choices.push({ text: "Có. Mình thích cậu.", nextQuest: 10, reward: 0, isConfession: true });
+                } else {
+                    text = "Cảnh hôm nay đẹp quá... Cậu là một người bạn rất tốt với mình.";
+                    choices.push({ text: "Tớ cũng rất vui khi làm bạn với cậu.", nextQuest: 9, reward: 0 });
+                }
+            }
+        }
+
+        UI.dialogueText.innerText = text;
+        choices.forEach(c => {
+            const btn = document.createElement('div'); btn.className = 'choice-btn'; btn.innerText = c.text;
+            btn.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                if(c.minigame) {
+                    UI.diagContainer.style.display = 'none';
+                    MinigameEngine.start(c.minigame, (r) => processEndDialogue(r, c.nextQuest, false));
+                } else {
+                    processEndDialogue(c.reward || 0, c.nextQuest, c.isConfession);
+                }
+            });
+            UI.choicesBox.appendChild(btn);
+        });
+        UI.diagContainer.style.display = 'flex'; UI.interactBtn.classList.remove('active');
+    }
+
+    function processEndDialogue(reward, nextQuest, isConfession) {
+        if (reward > 0) {
+            STATE.affection = Math.min(100, STATE.affection + reward);
+            UI.affectionFill.style.width = STATE.affection + '%';
+        }
+        if (isConfession) { triggerCinematicEnding(); return; }
+        if (nextQuest !== undefined && nextQuest !== STATE.questStep) {
+            STATE.questStep = nextQuest; 
+            UI.questTracker.innerText = QUEST_LOG[STATE.questStep]; 
+            loadEntities(); 
+        }
+        canvas.classList.remove('cinematic-blur'); 
+        UI.diagContainer.style.display = 'none';
+        STATE.mode = 'WORLD'; 
+        STATE.cooldown = 0.5; 
+    }
+
+    function triggerCinematicEnding() {
+        STATE.mode = 'CINEMATIC_ENDING'; canvas.classList.add('sunset-overlay');
+        UI.dialogueText.innerText = "Mình... mình cũng thích cậu từ lâu rồi...!";
+        setTimeout(() => {
+            UI.fadeOverlay.classList.add('fade-white'); 
+            UI.fadeOverlay.style.opacity = '1';
+            setTimeout(() => {
+                UI.uiLayer.style.display = 'none'; 
+                UI.endingScreen.style.background = '#fff'; 
+                UI.endingScreen.style.display = 'flex';
+                UI.endingScreen.innerHTML = `<h1 style="color: #ff758c; font-size: 40px; text-shadow: none;">TỎ TÌNH THÀNH CÔNG ❤️</h1><p style="font-size: 20px; font-style: italic; color: #555;">"Mình cũng thích cậu..."</p><p style="font-size: 13px; color: #aaa; margin-top: 40px; font-weight: bold; letter-spacing: 2px;">CREATED BY MINH ĐỨC</p>`;
+                setTimeout(() => { UI.endingScreen.style.opacity = '1'; }, 200);
+            }, 2000);
+        }, 2000);
+    }
+
+    function drawEntity(ctx, n) {
+        ctx.save(); ctx.translate(n.x, n.y);
+        if (n.isPortal) { 
+            ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2); ctx.fill(); 
+            ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n.name, 0, -40); 
+        } else if (n.isItem) { 
+            ctx.fillStyle = '#e2c874'; ctx.fillRect(-10, -10, 20, 15); 
+            ctx.fillStyle = '#ff758c'; ctx.font = 'bold 20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🎮', 0, -20); 
+        } else {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 6, 18, 8, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = n.isDL ? '#ff8fa3' : (n.isPlayer ? '#4a90e2' : '#8899aa'); 
+            ctx.beginPath(); ctx.moveTo(-12, -35); ctx.quadraticCurveTo(0, -40, 12, -35); ctx.lineTo(15, 0); ctx.lineTo(-15, 0); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ffe0bd'; ctx.beginPath(); ctx.arc(0, -50, 14, 0, Math.PI*2); ctx.fill(); 
+            if (n.isDL) { 
+                ctx.fillStyle = '#2c1e1e'; ctx.beginPath(); ctx.arc(0, -53, 16, Math.PI, 0); ctx.fill(); 
+                ctx.fillRect(-16, -53, 32, 25); 
+            }
+        }
+        ctx.restore();
+    }
+
+    function update(dt) {
+        if (STATE.cooldown > 0) STATE.cooldown -= dt;
+        if (STATE.mode !== 'WORLD') return;
+        
+        const vel = joystick.getVelocity();
+        const z = ZONES[STATE.map];
+        PLAYER.x += vel.x * PLAYER.speed * dt; 
+        PLAYER.y += vel.y * PLAYER.speed * dt;
+        PLAYER.x = Math.max(PLAYER.radius, Math.min(z.w - PLAYER.radius, PLAYER.x)); 
+        PLAYER.y = Math.max(PLAYER.radius, Math.min(z.h - PLAYER.radius, PLAYER.y));
+        
+        STATE.camera.x += (PLAYER.x - width/2 - STATE.camera.x) * 0.12; 
+        STATE.camera.y += (PLAYER.y - height/2 - STATE.camera.y) * 0.12;
+        
+        let closest = null; let minDist = 95;
+        CURRENT_ENTITIES.forEach(n => {
+            const d = Math.sqrt((n.x - PLAYER.x)**2 + (n.y - PLAYER.y)**2);
+            if (d < minDist) { minDist = d; closest = n; }
+        });
+        STATE.targetNPC = closest;
+        if (closest && STATE.cooldown <= 0) UI.interactBtn.classList.add('active'); 
+        else UI.interactBtn.classList.remove('active');
+    }
+
+    function draw() {
+        ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, width, height); 
+        ctx.save(); 
+        ctx.translate(width / 2, height / 2); 
+        ctx.scale(STATE.camera.zoom, STATE.camera.zoom);
+        ctx.translate(-width / 2, -height / 2); 
+        ctx.translate(-STATE.camera.x, -STATE.camera.y);
+        
+        const z = ZONES[STATE.map]; 
+        ctx.fillStyle = z.bg; 
+        ctx.fillRect(0, 0, z.w, z.h);
+        
+        let renders = [...CURRENT_ENTITIES, PLAYER].sort((a, b) => (a.y||0) - (b.y||0));
+        renders.forEach(e => drawEntity(ctx, e));
+        ctx.restore();
+
+        const grad = ctx.createRadialGradient(width/2, height/2, height*0.3, width/2, height/2, width*0.9);
+        grad.addColorStop(0, z.light); grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
+
+        if (STATE.mode === 'WORLD' || STATE.mode === 'TRANSITION') {
+            miniCtx.clearRect(0, 0, 160, 120); 
+            miniCtx.fillStyle = 'rgba(0,0,0,0.4)'; miniCtx.fillRect(0, 0, 160, 120);
+            const sX = 160/z.w; const sY = 120/z.h;
+            CURRENT_ENTITIES.forEach(e => {
+                miniCtx.beginPath(); miniCtx.arc(e.x*sX, e.y*sY, e.isPortal?3:4, 0, Math.PI*2);
+                miniCtx.fillStyle = e.isPortal?'#fff':(e.isDL?'#ff758c':'#aaa'); miniCtx.fill();
+            });
+            miniCtx.beginPath(); miniCtx.arc(PLAYER.x*sX, PLAYER.y*sY, 4, 0, Math.PI*2); miniCtx.fillStyle = '#4a90e2'; miniCtx.fill();
+        }
+    }
+
+    function mainLoop(time) {
+        const dt = Math.min((time - lastTime) / 1000, 0.1); 
+        lastTime = time; 
+        update(dt); 
+        draw(); 
+        requestAnimationFrame(mainLoop);
+    }
+
+    loadEntities();
+    UI.questTracker.innerText = QUEST_LOG[STATE.questStep];
+    setTimeout(() => { UI.fadeOverlay.style.opacity = '0'; }, 500);
+    requestAnimationFrame(mainLoop);
+</script>
+</body>
+</html>
